@@ -8,7 +8,7 @@ from flask_swagger import swagger
 from flask_cors import CORS
 from utils import APIException, generate_sitemap
 from admin import setup_admin
-from models import db, User, Character, Planet
+from models import db, User, Character, Planet, Favorite
 #from models import Person
 
 app = Flask(__name__)
@@ -72,18 +72,14 @@ def create_character():
     birth_year = request_data.get('birth_year')
     gender = request_data.get('gender')
 
-    # Validate the input data
     if not name or not birth_year or not gender:
         return jsonify({"message": "Missing required fields"}), 400
 
-    # Create a new Character object
     new_character = Character(name=name, birth_year=birth_year, gender=gender)
 
-    # Add the new character to the database
     db.session.add(new_character)
     db.session.commit()
 
-    # Serialize the new character and return it in the response
     return jsonify(new_character.serialize()), 201
 
 @app.route('/character/<int:character_id>', methods=['DELETE'])
@@ -131,6 +127,104 @@ def get_planet(planet_id):
         return jsonify({"message": f"No planet with id {planet_id}"}), 404
     return jsonify(planet.serialize()), 200
 
+
+@app.route('/users', methods=['GET'])
+def get_all_users():
+    users = User.query.all()
+    all_users = list(map(lambda x: x.serialize(), users))
+    return jsonify(all_users), 200
+
+@app.route('/users/favorites', methods=['GET'])
+def get_user_favorites():
+    user_id = request.headers.get('User-ID')
+    if not user_id:
+        return jsonify({"message": "Missing User-ID header"}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    favorites = Favorite.query.filter_by(user_id=user_id).all()
+    all_favorites = list(map(lambda x: x.serialize(), favorites))
+    return jsonify(all_favorites), 200
+
+@app.route('/favorite/planet/<int:planet_id>', methods=['POST'])
+def add_favorite_planet(planet_id):
+    user_id = request.headers.get('User-ID')
+    if not user_id:
+        return jsonify({"message": "Missing User-ID header"}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    
+    planet = Planet.query.get(planet_id)
+    if not planet:
+        return jsonify({"message": "Planet not found"}), 404
+    
+    favorite = Favorite(user_id=user.id, planet_id=planet.id)
+    db.session.add(favorite)
+    db.session.commit()
+
+    return jsonify(favorite.serialize()), 201
+
+@app.route('/favorite/character/<int:character_id>', methods=['POST'])
+def add_favorite_character(character_id):
+    user_id = request.headers.get('User-ID')
+    if not user_id:
+        return jsonify({"message": "Missing User-ID header"}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    
+    character = Character.query.get(character_id)
+    if not character:
+        return jsonify({"message": "Character not found"}), 404
+    
+    favorite = Favorite(user_id=user.id, character_id=character.id)
+    db.session.add(favorite)
+    db.session.commit()
+
+    return jsonify(favorite.serialize()), 201
+
+@app.route('/favorite/planet/<int:planet_id>', methods=['DELETE'])
+def delete_favorite_planet(planet_id):
+    user_id = request.headers.get('User-ID')
+    if not user_id:
+        return jsonify({"message": "Missing User-ID header"}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    
+    favorite = Favorite.query.filter_by(user_id=user.id, planet_id=planet_id).first()
+    if not favorite:
+        return jsonify({"message": "Favorite not found"}), 404
+    
+    db.session.delete(favorite)
+    db.session.commit()
+
+    return jsonify({"message": "Favorite deleted"}), 200
+
+@app.route('/favorite/character/<int:character_id>', methods=['DELETE'])
+def delete_favorite_character(character_id):
+    user_id = request.headers.get('User-ID')
+    if not user_id:
+        return jsonify({"message": "Missing User-ID header"}), 401
+    
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    
+    favorite = Favorite.query.filter_by(user_id=user.id, character_id=character_id).first()
+    if not favorite:
+        return jsonify({"message": "Favorite not found"}), 404
+    
+    db.session.delete(favorite)
+    db.session.commit()
+
+    return jsonify({"message": "Favorite deleted"}), 200
 
 # this only runs if `$ python src/app.py` is executed
 if __name__ == '__main__':
